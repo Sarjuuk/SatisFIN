@@ -1,0 +1,27 @@
+hdd-uuid                            file
+21A053484A21A2E4D1FD188650F05F75    master.lua
+BCF522D74E5581F121C5C9A6D78E838A    refinery.lua            [file host]
+5D7FB6194715D1AAA700E89B6109374F    fuel-plant-lua
+B2C1FFA1439F59207B8253BD6F644259    preprocessing.lua
+8E8E15F94B59212F616E1D849E8A6425    rubber-plant.lua
+8978981B402C4D16C17FBDBCD1ACC29D    plastic-plant.lua
+
+
+
+-- ---------
+-- loader
+-- ----------
+DEVICE  = 'Dummy'
+HDDUUID = 'AC6D58C54355A9F984369F80DAA43AF6'
+fs      = filesystem
+
+if not fs.initFileSystem('/dev') then
+    computer.panic('Cannot initialize /dev')
+end
+fs.mount('/dev/' .. HDDUUID, '/')
+
+if fs.isFile('/' .. string.lower(DEVICE) .. '.lua') then
+  fs.doFile('/' .. string.lower(DEVICE) .. '.lua')
+else
+  computer.panic('program code for ' .. string.lower(DEVICE) .. ' not found!')
+end
