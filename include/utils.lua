@@ -10,18 +10,34 @@ function math.round(num, numDecimalPlaces)
     return result
 end
 
-function GetLevel(ref, stackSize)
-    local inv     = ref:getInventories()[1]
+function GetLevel(ref, stackSize, material)
+    local inv = ref:getInventories()[1]
     if inv ~= nil then                   -- solid
-        return inv.ItemCount / (inv.size * stackSize)
+        if material then
+            local qty = 0
+            for i = 0, inv.size - 1, 1 do
+                local stack = inv:GetStack(i)
+                if stack.item.type and stack.item.type.name == material then
+                    stackSize = stack.item.type.max
+                    qty = qty + stack.count
+                end
+            end
+            return qty / (inv.size * (stackSize or 0)), qty
+        else
+            return inv.ItemCount / (inv.size * stackSize), inv.ItemCount
+        end
     elseif ref.fluidContent ~= nil then  -- fluid
-        return ref.fluidContent / ref.maxFluidContent
+        return ref.fluidContent / ref.maxFluidContent, ref.fluidContent
     else
         Log.write(Log.ERROR, 'getLevel() passed ref is no container!')
         computer.beep(1)
     end
 
-    return 0
+    return 0, 0
+end
+
+function NOP()
+    -- zZZ
 end
 
 function Time(time)

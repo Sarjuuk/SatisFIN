@@ -5,11 +5,14 @@ Net = {
         HANDSHAKE    = {'handleHandshakeRcv'},
         ACK          = {nil},
         NAK          = {nil},
+        REQ_ITEM     = {nil},
+        REQ_STATUS   = {nil},
+        RSP_PR_STATE = {nil},
+        RSP_BU_STATE = {nil},
         REQ_M_STATE  = {nil},
-        SND_M_STATE  = {nil},
+        SEND_M_STATE = {nil},
         SET_M_VAR    = {nil},
-        GET_M_VAR    = {nil},
-
+        GET_M_VAR    = {nil}
     },
     card = nil,
     _self = nil,
@@ -35,64 +38,65 @@ Net = {
         end
     end,
 
-    receive = function(self, srcUUID, msg, data2, data3)
+    receive = function(self, srcUUID, port, msg, data1, data2, data3)
 
-        Log:write(Log.INFO, 'Net:receive() - ' .. srcUUID, msg, data2, data3)
+        Log:write(Log.DEBUG, 'Net:receive() - ' .. srcUUID, msg, port, data1, data2, data3)
 
         if self.msg[msg] then
             local handler, x, y, z = table.unpack(self.msg[msg])
             if not handler then
-                Log:write(Log.INFO, 'Net:receive() - undefined handler for message: ' .. msg)
+                Log:write(Log.ERROR, 'Net:receive() - undefined handler for message: ' .. msg)
                 return
             end
 
-            self:logReceive(srcUUID, msg, data2, data3)
+            self:logReceive(srcUUID, msg, data1, data2, data3)
 
-            handler(self, srcUUID, data2, data3)
-
+            handler(self, srcUUID, data1, data2, data3)
         else
-            Log:write(Log.INFO, 'Net:receive() - unknown msg type dicarded: ' .. msg)
+            Log:write(Log.WARN, 'Net:receive() - unknown msg type dicarded: ' .. msg)
         end
     end,
 
 
-    send = function(self, targetUUID, targetPort, msg, data2, data3)
+    send = function(self, targetUUID, targetPort, msg, data1, data2, data3)
 
-        Log:write(Log.INFO, 'Net:send() - ' .. tostring(targetUUID), targetPort, msg, data2, data3)
+        Log:write(Log.DEBUG, 'Net:send() - ' .. tostring(targetUUID), targetPort, msg, data1, data2, data3)
 
-        self:logSend(targetUUID, msg, data2, data3)
+        self:logSend(targetUUID, msg, data1, data2, data3)
 
         if targetUUID ~= nil then
-            self.card:send(targetUUID, targetPort, msg, data2, data3)
+            self.card:send(targetUUID, targetPort, msg, data1, data2, data3)
         else
-            self.card:broadcast(targetPort, msg, data2, data3)
+            self.card:broadcast(targetPort, msg, data1, data2, data3)
         end
     end,
 
     handlePingRecv = function(self, srcUUID)
 
-        Log:write(Log.INFO, 'Net:handlePingRecv() - ' .. srcUUID)
+        Log:write(Log.DEBUG, 'Net:handlePingRecv() - ' .. srcUUID)
 
         self:send(srcUUID, self.ports.broadcast, 'PONG', self._self)
     end,
 
     handleHandshakeRcv = function(self, srcUUID, machine, port)
 
-        Log:write(Log.INFO, 'Net:handleHandshakeRcv() - ' .. srcUUID, machine, port)
+        Log:write(Log.DEBUG, 'Net:handleHandshakeRcv() - ' .. srcUUID, machine, port)
 
         local ok = true
         for m, p in pairs (self.ports) do
             if m == machine then
                 Log:write(Log.INFO, 'Net:handleHandshakeRcv() - redefine already set connection with', m)
+                self.card:close(p)
             elseif p == port then
                 ok = false
-                Log:write(Log.INFO, 'Net:handleHandshakeRcv() - cannot connect to' .. machine .. '. Port already in use by '.. m)
+                Log:write(Log.WARN, 'Net:handleHandshakeRcv() - cannot connect to' .. machine .. '. Port already in use by '.. m)
                 break
             end
         end
 
         if ok then
             self:send(srcUUID, self.ports.broadcast, 'ACK', 'HANDSHAKE', port)
+            self.card:open(port)
             self.ports[machine] = port
         else
             self:send(srcUUID, self.ports.broadcast, 'NAK', 'HANDSHAKE', port)
