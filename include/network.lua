@@ -1,10 +1,11 @@
 Net = {
     msg = {
-        PING         = {'handlePingRecv'},
-        PONG         = {'handlePongRecv'},
+        PING         = {'handlePingRcv'},
+        PONG         = {'handlePongRcv'},
         HANDSHAKE    = {'handleHandshakeRcv'},
         ACK          = {nil},
         NAK          = {nil},
+        RESET        = {'handleResetRcv'},
         REQ_ITEM     = {nil},
         REQ_STATUS   = {nil},
         RSP_PR_STATE = {nil},
@@ -71,9 +72,18 @@ Net = {
         end
     end,
 
-    handlePingRecv = function(self, srcUUID)
+    handleResetRcv = function(self, srcUUID)
 
-        Log:write(Log.DEBUG, 'Net:handlePingRecv() - ' .. srcUUID)
+        Log:write(Log.DEBUG, 'Net:handleResetRcv() - ' .. srcUUID)
+
+        local delay = math.random(3)
+        Schedule:add(delay + 1, computer.reset)
+        Schedule:add(delay, Net.send, {Net, srcUUID, self.ports.broadcast, 'ACK', 'RESET'})
+    end,
+
+    handlePingRcv = function(self, srcUUID)
+
+        Log:write(Log.DEBUG, 'Net:handlePingRcv() - ' .. srcUUID)
 
         self:send(srcUUID, self.ports.broadcast, 'PONG', self._self)
     end,
@@ -108,7 +118,12 @@ Net = {
             self.outStack[UUID] = {}
         end
 
-        if UUID == nil then                                 -- write for already extablished conections
+        -- causes out of memory exceptions ?
+        if true then
+            return
+        end
+
+        if false and UUID == nil then                                 -- write for already extablished conections
             local tmp = {}
             for u, _ in pairs(self.outStack) do
                 tmp[u] = u
@@ -128,6 +143,9 @@ Net = {
         if self.inStack[UUID] == nil then
             self.inStack[UUID] = {}
         end
+
+        -- causes out of memory exceptions ?
+        return
 
         table.insert(self.inStack[UUID], {...})
     end

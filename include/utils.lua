@@ -11,6 +11,10 @@ function math.round(num, numDecimalPlaces)
 end
 
 function GetLevel(ref, stackSize, material)
+    if not ref or not ref.getInventories then
+        return 0, 0
+    end
+
     local inv = ref:getInventories()[1]
     if inv ~= nil then                   -- solid
         if material then
@@ -35,6 +39,31 @@ function GetLevel(ref, stackSize, material)
 
     return 0, 0
 end
+
+function ScaleProduction(machines, curBuffer, maxBuffer, inverse)
+    local step    = maxBuffer / #machines
+    local state   = true
+    local enabled = 0
+    if inverse then
+        state = false
+    end
+
+    for i, ref in pairs(machines) do
+        if curBuffer > (i + 1) * step and ref.standby ~= state then
+            ref.standby = state
+        elseif curBuffer <= i * step then
+            if (ref.productivity > 0.2) then
+                enabled = enabled + 1
+            end
+            if ref.standby == state then
+                ref.standby = not state
+            end
+        end
+    end
+
+    return enabled, #machines
+end
+
 
 function NOP()
     -- zZZ
@@ -65,11 +94,12 @@ function string.pad(str, len, sub, front)
     sub   = sub or ' '
     front = front or false
 
-    while #str < len do
+    while #tostring(str) < len do
         if front then
             str = sub .. str
+        else
+            str = str .. sub
         end
-        str = str .. sub
     end
     return str
 end
@@ -81,7 +111,6 @@ function Keys(tbl)
     end
     return table.unpack(set)
 end
-
 
 Log = {
     NONE  = 0,

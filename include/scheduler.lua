@@ -34,11 +34,16 @@ Schedule = {
             repeatTimeDelta or 0
         }
 
-        return newIdx
+        return self.events[newIdx]
     end,
 
-    remove = function(self, idx)
-        table.remove(self.events, idx)
+    remove = function(self, event)
+        for i, row in pairs(self.events) do
+            if row[2] == event[2] and row[3] == event[3] and row[4] == event[4] then
+                table.remove(self.events, i)
+                break
+            end
+        end
     end
 
 }

@@ -25,3 +25,31 @@ if fs.isFile('/' .. string.lower(DEVICE) .. '.lua') then
 else
   computer.panic('program code for ' .. string.lower(DEVICE) .. ' not found!')
 end
+
+
+GPU
+functions
+    setText(int x, int y, string text) : nil
+    setSize(int width, int, height) : nil
+    getSize() : int w, int h
+
+    setForeground(float red, float green, float blue, float alpha) : nil
+    setBackground(float red, float green, float blue, float alpha) : nil
+    fill(int x, int y, int dx, int dy, string char) : nil
+
+    setBuffer(GPUT1Buffer buffer) : nil
+    getBuffer() : GPUT1Buffer buffer
+
+    flush() : nil  -- draw from buffer
+
+    bindScreen(Object screen) : nil
+    getScreen() : Object screen
+signals
+    ScreenBound : Object oldScreen
+    ScreenSizeChanged : int oldW, int oldH
+    OnMouseUp : int x, int y, int btnMask
+    OnMouseDown : int x, int y, int btnMask
+    OnMouseMove : int x, int y, int btnMask
+    OnKeyUp : int ascii, int keyCode, int btnMask
+    OnKeyDown : int ascii, int keyCode, int btnMask
+    OnKeyChar : string char, int btnMask

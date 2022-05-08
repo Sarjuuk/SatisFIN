@@ -24,7 +24,7 @@ PlantName = 'preprocessing'
     end
 end
 
-function blink(lights, speed, red, green, blue)
+function blink(self, lights, speed, red, green, blue)
 
     if (blDir) then
         blItr = blItr + speed
@@ -39,9 +39,9 @@ function blink(lights, speed, red, green, blue)
     end
 
     c = {
-        r=red   * blItr / 255,
-        g=green * blItr / 255,
-        b=blue  * blItr / 255
+        r = red   * blItr / 255,
+        g = green * blItr / 255,
+        b = blue  * blItr / 255
     }
 
     for _, light in pairs(lights) do
@@ -80,50 +80,33 @@ end
 
 Net.msg.REQ_STATUS[1] = 'handleReqPlantStateRcv'
 Net[Net.msg.REQ_STATUS[1]] = function(self, srcUUID, name, qty)
-    local nMsg = #Plant.refs.prod.plastic + #Plant.refs.prod.rubber
-    Net:send(srcUUID, Net.ports.master, 'ACK', 'REQ_STATUS', nMsg + 2) --  expect n+2 datasets in return
+    Net:send(srcUUID, Net.ports.master, 'ACK', 'REQ_STATUS', 2 + 2)                 -- 2 prod lines, 2 buffer
 
     for n, data in pairs(Plant.stats.prod) do
-        Net:send(srcUUID, Net.ports.master, 'RSP_PR_STATE', n, data.cur, data.max) --  what, cur, max
+        Net:send(srcUUID, Net.ports.master, 'RSP_PR_STATE', n, data.cur, data.max)  -- what, cur, max
     end
 
-    for n, data in pairs(Plant.stats) do
-        Net:send(srcUUID, Net.ports.master, 'RSP_PR_STATE', n, data.cur, data.max) --  what, cur, max
+    for n, data in pairs(Plant.stats.buffer) do
+        Net:send(srcUUID, Net.ports.master, 'RSP_BU_STATE', n, data.cur, data.max)  -- what, cur, max
     end
-end
-
-function ScaleProd(refs, cur, max, inverse)
-    local step    = max / #refs
-    local state   = true
-    local enabled = 0
-    if inverse then
-        state = false
-    end
-
-    for i, ref in pairs(refs) do
-        if cur > (i + 1) * step then
-            ref.standby = state
-        elseif cur <= i * step then
-            enabled = enabled + 1
-            ref.standby = not state
-        end
-    end
-
-    return enabled, #refs
 end
 
 function HandleScaling()
     local maxBuffer = 500
 
     local _, abs = GetLevel(Plant.refs.buffer.plastic[1], StackSize, 'Plastic')
-    local cur, max = ScaleProd(Plant.refs.prod.plastic, abs, maxBuffer)
-    Plant.stats.prod.plastic = {cur=cur, max=max}
-    -- Log:write(Log.DEBUG, 'Out Buffer Plastic:', abs, u .. '/' .. v .. ' machines active')
+    local cur, max = ScaleProduction(Plant.refs.prod.plastic, abs, maxBuffer)
+    Plant.stats.prod.plastic   = {cur = cur, max = max}
+    Plant.stats.buffer.plastic = {cur = abs, max = maxBuffer}
+
+    -- Log:write(Log.DEBUG, 'HandleScaling() - Plastic - Buffer:', string.pad(abs, 4, ' ', true), 'Production:', cur .. '/' .. max)
 
     local _, abs = GetLevel(Plant.refs.buffer.rubber[1], StackSize, 'Rubber')
-    local cur, max = ScaleProd(Plant.refs.prod.rubber, abs, maxBuffer)
-    Plant.stats.prod.rubber = {cur=cur, max=max}
-    -- Log:write(Log.DEBUG, 'Out Buffer Rubber:', abs, x .. '/' .. y .. ' machines active')
+    local cur, max = ScaleProduction(Plant.refs.prod.rubber, abs, maxBuffer)
+    Plant.stats.prod.rubber   = {cur = cur, max = max}
+    Plant.stats.buffer.rubber = {cur = abs, max = maxBuffer}
+
+    -- Log:write(Log.DEBUG, 'HandleScaling() - Rubber  - Buffer:', string.pad(abs, 4, ' ', true), 'Production:', cur .. '/' .. max)
 end
 
 
@@ -195,21 +178,21 @@ blDir = true
 ReqRubber  = 0
 ReqPlastic = 0
 
-local ru, pl = component.findComponent('Rubber', 'Plastic')
+local rm, pm, rb, pb, m, s = component.findComponent('Rubber Machine', 'Plastic Machine', 'Rubber Buffer', 'Plastic Buffer', 'Merger', 'Signal')
 Plant = {
     refs = {
         prod = {
-            rubber  = component.proxy(ru),
-            plastic = component.proxy(pl),
+            rubber  = component.proxy(rm),
+            plastic = component.proxy(pm),
             water   = {} -- maybe later
         },
         buffer = {
-            rubber  = {component.proxy('1489279943840705A18E8DA8C5AA01FB')},
-            plastic = {component.proxy('425A6336474A4A371E274DA2860BFAEE')}
+            rubber  = component.proxy(rb),
+            plastic = component.proxy(pb)
         },
         misc = {
-            lights = {component.proxy('ECB1E4744DA6DC0EFA7BD281F7E1163C', '48F1F46940E59119E61153BDBE992F25')},
-            merger = component.proxy('824E6BCB44C2F25D23E80F9DE8E50D56')
+            lights = component.proxy(s),
+            merger = component.proxy(m[1])
         }
     },
     stats = {

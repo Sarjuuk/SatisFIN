@@ -2,7 +2,7 @@
 -- vars
 -- -----------
 
-Factories = {       -- {NetUUID, Port}
+Factories = {       -- {NetUUID, Port, Schedule}
     refinery      = {},
     fuelPlant     = {},
     plasticPlant  = {},
@@ -17,15 +17,36 @@ ExtFiles  = {
     '/include/network.lua',
     '/include/event.lua',
     '/include/scheduler.lua',
-    '/include/logger.lua'
+    '/include/logger.lua',
+    '/include/graph.lua'
 }
 
 PlantName = 'master'
 
-Ready = false
+--[[
+    1: boot
+    2: run
+    3: shutdownWait
+    4: shutdown
+ ]]
+
+State = 1
 
 ReqRubber  = 0
 ReqPlastic = 0
+
+GPU = computer.getPCIDevices(findClass("GPUT1"))[1]
+assert(GPU, 'No GPU found!')
+
+Screen = component.proxy(component.findComponent(findClass("Screen"))[1])
+assert(Screen, 'No Screen found!')
+
+GPU:bindScreen(Screen)
+GPU:setSize(140, 49)
+
+ButtonHolder = component.proxy(component.findComponent('ButtonHolder')[1])
+Reset = ButtonHolder:getModule(0, 0)
+Reset:setColor(0.5, 0.5, 0, 1)
 
 -- ----------
 -- load helper funcs
@@ -64,10 +85,6 @@ Net[Net.msg.PONG[1]] = function(self, srcUUID, name)
     end
 end
 
-Net.msg.RSP_PR_STATE[1] = 'handleResponsePlantStateRcv'
-Net[Net.msg.RSP_PR_STATE[1]] = function(self, srcUUID, name, cur, max)
-    print(srcUUID, name, cur, max)
-end
 
 Net.msg.ACK[1] = 'handleAccept'
 Net[Net.msg.ACK[1]] = function(self, srcUUID, msg, data, moreData)
@@ -98,6 +115,18 @@ Net[Net.msg.NAK[1]] = function(self, srcUUID, msg, data, moreData)
 end
 
 
+Net.msg.RSP_PR_STATE[1] = 'handleResponseProdStateRcv'
+Net[Net.msg.RSP_PR_STATE[1]] = function(self, srcUUID, name, cur, max)
+    Graph:addData(srcUUID, name, 1, cur, max)
+end
+
+
+Net.msg.RSP_BU_STATE[1] = 'handleResponseBufferStateRcv'
+Net[Net.msg.RSP_BU_STATE[1]] = function(self, srcUUID, name, cur, max)
+    Graph:addData(srcUUID, name, 2, cur, max)
+end
+
+
 HandleAccept = {
     HANDSHAKE = function(srcUUID, msg, data, moreData)
         local idx = nil
@@ -122,6 +151,14 @@ HandleAccept = {
     REQ_ITEM = NOP,
     REQ_STATUS = function(srcUUID, msg, data, moreData)
 
+    end,
+    RESET = function(srcUUID, msg, data)
+        for i, adr in pairs(Factories) do
+            if adr[1] == srcUUID then
+                Factories[i][1] = true
+                return
+            end
+        end
     end
 }
 
@@ -137,6 +174,14 @@ HandleDecline = {
             ReqRubber = ReqRubber + moreData
         else
             Log:write(Log.WARN, 'Net:handleAccept() - {' .. msg .. '} unexpected item type:', data)
+        end
+    end,
+    RESET = function(srcUUID, msg, data)
+        for i, adr in pairs(Factories) do
+            if adr[1] == srcUUID then
+                Factories[i][1] = false
+                return
+            end
         end
     end
 }
@@ -167,7 +212,7 @@ function TryConnect()
 end
 
 function CheckConnection()
-    if Ready then
+    if State ~= 1 then
         return
     end
 
@@ -181,12 +226,13 @@ function CheckConnection()
     end
 
     Log:write(Log.INFO, 'Systems connected - ready!')
- -- Schedule:add(0.1, Net.send, {Net, Factories.refinery[1],      Factories.refinery[2],      'REQ_STATUS'}, 1)
- -- Schedule:add(0.3, Net.send, {Net, Factories.fuelPlant[1],     Factories.fuelPlant[2],     'REQ_STATUS'}, 1)
-    Schedule:add(0.5, Net.send, {Net, Factories.preprocessing[1], Factories.preprocessing[2], 'REQ_STATUS'}, 1)
- -- Schedule:add(0.7, Net.send, {Net, Factories.plasticPlant[1],  Factories.plasticPlant[2],  'REQ_STATUS'}, 1)
- -- Schedule:add(0.9, Net.send, {Net, Factories.rubberPlant[1],   Factories.rubberPlant[2],   'REQ_STATUS'}, 1)
-    Ready = true
+ -- Factories.refinery[3]      = Schedule:add(0.1, Net.send, {Net, Factories.refinery[1],      Factories.refinery[2],      'REQ_STATUS'}, 1)
+    Factories.fuelPlant[3]     = Schedule:add(0.3, Net.send, {Net, Factories.fuelPlant[1],     Factories.fuelPlant[2],     'REQ_STATUS'}, 1)
+    Factories.preprocessing[3] = Schedule:add(0.5, Net.send, {Net, Factories.preprocessing[1], Factories.preprocessing[2], 'REQ_STATUS'}, 1)
+ -- Factories.plasticPlant[3]  = Schedule:add(0.7, Net.send, {Net, Factories.plasticPlant[1],  Factories.plasticPlant[2],  'REQ_STATUS'}, 1)
+ -- Factories.rubberPlant[3]   = Schedule:add(0.9, Net.send, {Net, Factories.rubberPlant[1],   Factories.rubberPlant[2],   'REQ_STATUS'}, 1)
+    State = 2
+    Reset:setColor(0, 1, 0, 2)
 end
 
 function HandleSplitter()
@@ -220,6 +266,18 @@ function EvSplitterIn(item)
     print('EvSplitterIn', item)
 end
 
+function EvReset()
+    State = 3
+    Reset:setColor(1, 0.5, 0, 1)
+    for n, adr in pairs(Factories) do
+        Net:send(adr[1], adr[2], 'RESET')
+        if adr[3] then
+            Schedule:remove(adr[3])
+            Factories[n][3] = nil
+        end
+    end
+end
+
 
 -- ----------
 -- run
@@ -227,18 +285,74 @@ end
 
 Log:write(Log.INFO, 'System started')
 
+Graph:init(GPU, 22)
+
 Net:init(PlantName)
 
 -- event:register(Splitter, {EvSplitterIn}, 'ItemRequest')
 event:register(Splitter, {EvSplitterOut}, 'ItemOutputted')
 
+event:register(Reset, {EvReset}, 'Trigger')
+
 Schedule:add(1, Net.send, {Net, nil, Net.ports.broadcast, 'PING', Net._self})
 Schedule:add(3, TryConnect)
+
+Pad = 10
+function TickUp()
+    Pad = Pad + 1
+end
+TickerEV = Schedule:add(1, TickUp, nil, 1)
 
 repeat
     event:update()
 
     Schedule:update(computer.millis())
+
+    if State == 1 then
+        GPU:setText(0, 0, string.pad('Booting', Pad, '.'))
+        GPU:flush()
+        goto continue
+    elseif State == 3 then
+        Graph:cls()
+        GPU:setText(0, 0, 'Shutdown: Waiting for clients..')
+        local i = 0
+        local j = 0
+        for n, adr in pairs(Factories) do
+            i = i + 1
+            if type(adr[1]) == 'string' then
+                GPU:setText(0, i, '  ' .. n .. '.. ')
+            elseif adr[1] then
+                GPU:setText(0, i, '  ' .. n .. '.. ')
+                GPU:setForeground(0, 1, 0, 1)
+                GPU:setText(#n + 5, i, 'OK')
+                GPU:setForeground(1, 1, 1, 1)
+                j = j + 1
+            else
+                GPU:setText(0, i, '  ' .. n .. '.. ')
+                GPU:setForeground(1, 0, 0, 1)
+                GPU:setText(#n + 5, i, 'ERR')
+                GPU:setForeground(1, 1, 1, 1)
+            end
+        end
+        GPU:flush()
+
+        if i == j then
+            Schedule:add(2, computer.reset)
+            State = 4
+            Reset:setColor(1, 0, 0, 1)
+        end
+        goto continue
+    elseif State == 4 then
+        Graph:cls()
+        GPU:setText(0, 0, 'Shutting down...')
+        GPU:flush()
+        goto continue
+    end
+
+    if TickerEV then
+        Schedule:remove(TickerEV)
+        TickerEV = nil
+    end
 
     HandleSplitter()
     if ReqRubber > 0 then
@@ -249,5 +363,9 @@ repeat
         Net:send(Factories.preprocessing[1], Factories.preprocessing[2], 'REQ_ITEM', 'Plastic', ReqPlastic)
         ReqPlastic = 0
     end
+
+    Graph:draw(1, 1)
+
+    ::continue::
 
 until false
