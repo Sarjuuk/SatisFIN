@@ -117,37 +117,6 @@ function HandleExcessResin()
     end
 end
 
-function HandleEStop()
-    -- toggle state
-    Stopped = not Stopped
-
-    -- update buttons
-    for i, ref in pairs(EStops) do
-        if Stopped then
-            ref:setColor(1, 0, 0, 0.8)
-        else
-            ref:setColor(1, 0, 0, 0)
-        end
-    end
-
-    --  update machines
-    for i, tbl in pairs(HorRef) do
-        for j, ref in pairs(tbl) do
-            ref.standby = Stopped
-        end
-    end
-
-    for i, ref in pairs(ResinRef) do
-        ref.standby = Stopped
-    end
-
-    for i, ref in pairs(CokeRef) do
-        ref.standby = Stopped
-    end
-
-    ExcessPump.standby = Stopped
-end
-
 
 Log:write(Log.INFO, 'System started')
 
@@ -160,8 +129,37 @@ Net:init(PlantName)
 
 for i, ref in pairs(EStopHolder) do
     local mod = ref:getModule(0, 0)
-    event:register(mod, {HandleEStop}, 'Trigger')
     EStops[i] = mod
+    event:register(mod, 'Trigger', function ()
+        -- toggle state
+        Stopped = not Stopped
+
+        -- update buttons
+        for i, ref in pairs(EStops) do
+            if Stopped then
+                ref:setColor(1, 0, 0, 0.8)
+            else
+                ref:setColor(1, 0, 0, 0)
+            end
+        end
+
+        --  update machines
+        for i, tbl in pairs(HorRef) do
+            for j, ref in pairs(tbl) do
+                ref.standby = Stopped
+            end
+        end
+
+        for i, ref in pairs(ResinRef) do
+            ref.standby = Stopped
+        end
+
+        for i, ref in pairs(CokeRef) do
+            ref.standby = Stopped
+        end
+
+        ExcessPump.standby = Stopped
+    end)
 end
 
 

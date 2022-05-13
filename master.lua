@@ -41,12 +41,14 @@ assert(GPU, 'No GPU found!')
 Screen = component.proxy(component.findComponent(findClass("Screen"))[1])
 assert(Screen, 'No Screen found!')
 
-GPU:bindScreen(Screen)
-GPU:setSize(140, 49)
-
 ButtonHolder = component.proxy(component.findComponent('ButtonHolder')[1])
 Reset = ButtonHolder:getModule(0, 0)
-Reset:setColor(0.5, 0.5, 0, 1)
+assert(Reset, 'No Reset Button found!')
+
+NetPanel = component.proxy(component.findComponent('NetPanel')[1])
+NetSendLED = NetPanel:getModule(0, 0)
+NetRecvLED = NetPanel:getModule(1, 0)
+
 
 -- ----------
 -- load helper funcs
@@ -117,13 +119,15 @@ end
 
 Net.msg.RSP_PR_STATE[1] = 'handleResponseProdStateRcv'
 Net[Net.msg.RSP_PR_STATE[1]] = function(self, srcUUID, name, cur, max)
-    Graph:addData(srcUUID, name, 1, cur, max)
+    UpperGraph:addData(srcUUID, name, 1, cur, max)
+    LowerGraph:addData(srcUUID, name, 1, cur, max)
 end
 
 
 Net.msg.RSP_BU_STATE[1] = 'handleResponseBufferStateRcv'
 Net[Net.msg.RSP_BU_STATE[1]] = function(self, srcUUID, name, cur, max)
-    Graph:addData(srcUUID, name, 2, cur, max)
+    UpperGraph:addData(srcUUID, name, 2, cur, max)
+    LowerGraph:addData(srcUUID, name, 2, cur, max)
 end
 
 
@@ -186,6 +190,7 @@ HandleDecline = {
     end
 }
 
+
 -- ----------
 -- funcs
 -- ----------
@@ -205,6 +210,7 @@ function TryConnect()
     if not ok then
         local delay = 5
         Log:write(Log.WARN, 'missing factory: retrying connection in ' .. delay .. 's')
+        Schedule:add(delay - 2, Net.send, {Net, nil, Net.ports.broadcast, 'PING', Net._self})
         Schedule:add(delay, TryConnect)
     else
         Schedule:add(2, CheckConnection, 'CheckConnection')
@@ -232,41 +238,57 @@ function CheckConnection()
  -- Factories.plasticPlant[3]  = Schedule:add(0.7, Net.send, {Net, Factories.plasticPlant[1],  Factories.plasticPlant[2],  'REQ_STATUS'}, 1)
  -- Factories.rubberPlant[3]   = Schedule:add(0.9, Net.send, {Net, Factories.rubberPlant[1],   Factories.rubberPlant[2],   'REQ_STATUS'}, 1)
     State = 2
+    CLS(GPU)
     Reset:setColor(0, 1, 0, 2)
 end
 
 function HandleSplitter()
-    -- Outputs
-    -- 0 - Rubber
-    -- 1 - None
-    -- 2 - Plastic
-
     local item = Splitter:getInput()
     if not item or not item.type then
         return
     end
 
-    if item.type.name == 'Rubber' and Splitter:canOutput(0) then
-        Splitter:transferItem(0)
+    if item.type.name == 'Rubber' and Splitter:canOutput(PORT.LEFT) then
+        Splitter:transferItem(PORT.LEFT)
 
-    elseif item.type.name == 'Plastic' and Splitter:canOutput(2) then
-        Splitter:transferItem(2)
+    elseif item.type.name == 'Plastic' and Splitter:canOutput(PORT.RIGHT) then
+        Splitter:transferItem(PORT.RIGHT)
     end
 end
 
-function EvSplitterOut(port, item)
+
+-- ----------
+-- run
+-- ----------
+
+Log:start()
+
+Log:write(Log.INFO, 'System started')
+
+UpperGraph = Graph:new()
+LowerGraph = Graph:new()
+
+UpperGraph:init(GPU, 22, 1, 1)
+LowerGraph:init(GPU, 22, 1, 30)
+
+Net:init(PlantName, NetRecvLED, NetSendLED)
+Net:send(nil, Net.ports.broadcast, 'PING', Net._self)
+
+GPU:bindScreen(Screen)
+GPU:setSize(160, 56)
+
+Reset:setColor(0.5, 0.5, 0, 1)
+
+event:register(Splitter, 'ItemRequest', NOP)
+event:register(Splitter, 'ItemOutputted', function (port, item)
     if port == 0 then
         ReqRubber = ReqRubber + 1
     elseif port == 2 then
         ReqPlastic = ReqPlastic + 1
     end
-end
+end)
 
-function EvSplitterIn(item)
-    print('EvSplitterIn', item)
-end
-
-function EvReset()
+event:register(Reset, 'Trigger', function ()
     State = 3
     Reset:setColor(1, 0.5, 0, 1)
     for n, adr in pairs(Factories) do
@@ -276,23 +298,7 @@ function EvReset()
             Factories[n][3] = nil
         end
     end
-end
-
-
--- ----------
--- run
--- ----------
-
-Log:write(Log.INFO, 'System started')
-
-Graph:init(GPU, 22)
-
-Net:init(PlantName)
-
--- event:register(Splitter, {EvSplitterIn}, 'ItemRequest')
-event:register(Splitter, {EvSplitterOut}, 'ItemOutputted')
-
-event:register(Reset, {EvReset}, 'Trigger')
+end)
 
 Schedule:add(1, Net.send, {Net, nil, Net.ports.broadcast, 'PING', Net._self})
 Schedule:add(3, TryConnect)
@@ -309,11 +315,12 @@ repeat
     Schedule:update(computer.millis())
 
     if State == 1 then
+        CLS(GPU)
         GPU:setText(0, 0, string.pad('Booting', Pad, '.'))
         GPU:flush()
         goto continue
     elseif State == 3 then
-        Graph:cls()
+        CLS(GPU)
         GPU:setText(0, 0, 'Shutdown: Waiting for clients..')
         local i = 0
         local j = 0
@@ -343,7 +350,7 @@ repeat
         end
         goto continue
     elseif State == 4 then
-        Graph:cls()
+        CLS(GPU)
         GPU:setText(0, 0, 'Shutting down...')
         GPU:flush()
         goto continue
@@ -364,7 +371,8 @@ repeat
         ReqPlastic = 0
     end
 
-    Graph:draw(1, 1)
+    UpperGraph:draw()
+    LowerGraph:draw()
 
     ::continue::
 

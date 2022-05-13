@@ -1,15 +1,15 @@
 event.delay = 0.10
 event.components = {}
 
-function event.register(self, component, handler, forType)
+function event:register(component, forType, handler)
 
-    Log:write(Log.DEBUG, 'event:register() - ' .. tostring(component), table.unpack(handler), forType)
+    Log:write(Log.DEBUG, 'event:register() - ' .. tostring(component), handler, forType)
 
     event.listen(component)
     table.insert(self.components, {component, handler, forType or nil})
 end
 
-function event.detach(self, component, forType)
+function event:detach(component, forType)
 
     Log:write(Log.DEBUG, 'event:detach() - ' .. tostring(component), forType)
 
@@ -29,7 +29,7 @@ function event.detach(self, component, forType)
     end
 end
 
-function event.update(self)
+function event:update()
     local type, comp, data1, data2, data3, data4, data5, data6, data7 = event.pull(self.delay)
 
     if (type == nil) then
@@ -41,12 +41,7 @@ function event.update(self)
     for i, entry in pairs(self.components) do
         if comp == entry[1] then
             if not entry[3] or entry[3] == type then
-                if entry[2][2] ~= nil then
-                    _G[entry[2][1]][entry[2][2]](_G[entry[2][1]], data1, data2, data3, data4, data5, data6, data7)
-                else
-                    entry[2][1](data1, data2, data3, data4, data5, data6, data7)
-                end
-
+                entry[2](data1, data2, data3, data4, data5, data6, data7)
                 return
             end
         end

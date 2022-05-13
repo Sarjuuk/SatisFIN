@@ -111,58 +111,39 @@ end
 
 
 function HandleOutput()
-    -- Inputs
-    -- 0 - Rubber
-    -- 1 - None
-    -- 2 - Plastic
-
     local merger = Plant.refs.misc.merger
 
     if not merger.canOutput then
         return
     end
+    local hasRubber  = merger:getInput(PORT.LEFT)
+    local hasPlastic = merger:getInput(PORT.RIGHT)
 
-    if ReqRubber > ReqPlastic and ReqRubber > 0 then
-        local item = merger:getInput(0)
-        if item then
-            merger:transferItem(0)
+    if ReqRubber > ReqPlastic then
+        if hasRubber and ReqRubber > 0 then
+            merger:transferItem(PORT.LEFT)
             ReqRubber = ReqRubber - 1
             return
         end
 
-        local item = merger:getInput(2)
-        if item then
-            merger:transferItem(2)
+        if hasPlastic and ReqPlastic > 0 then
+            merger:transferItem(PORT.RIGHT)
             ReqPlastic = ReqPlastic - 1
             return
         end
-    elseif ReqPlastic > 0 then
-        local item = merger:getInput(2)
-        if item then
-            merger:transferItem(2)
+    else
+        if hasPlastic and ReqPlastic > 0 then
+            merger:transferItem(PORT.RIGHT)
             ReqPlastic = ReqPlastic - 1
             return
         end
 
-        local item = merger:getInput(0)
-        if item then
-            merger:transferItem(0)
+        if hasRubber and ReqRubber > 0 then
+            merger:transferItem(PORT.LEFT)
             ReqRubber = ReqRubber - 1
             return
         end
     end
-end
-
-function EvMergerOut(item)
-    if item.type.name == 'Rubber' then
-        ReqRubber = ReqRubber - 1
-    elseif item.type.name == 'Plastic' then
-        ReqPlastic = ReqPlastic - 1
-    end
-end
-
-function EvMergerIn(port, item)
-    print('EvSplitterIn', item, port)
 end
 
 
@@ -212,9 +193,20 @@ Plant = {
 Net:init(PlantName)
 
 -- item.type empty for some reason .. use workaround
--- event:register(Merger, {EvMergerOut}, 'ItemOutputted')
--- event:register(Merger, {EvMergerIn}, 'ItemRequest')
-
+--[[
+event:register(Merger, 'ItemOutputted', function (item)
+    if item.type.name == 'Rubber' then
+        ReqRubber = ReqRubber - 1
+    elseif item.type.name == 'Plastic' then
+        ReqPlastic = ReqPlastic - 1
+    end
+end)
+  ]]
+--[[
+event:register(Merger, 'ItemRequest', function (port, item)
+    print('EvSplitterIn', item, port)
+end)
+  ]]
 
 -- ----------
 -- run

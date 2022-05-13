@@ -25,6 +25,8 @@ Schedule = {
     add = function(self, timeDelta, func, params, repeatTimeDelta)
         local newIdx = math.max(0, Keys(self.events)) + 1
 
+        params = params or {}
+
         Log:write(Log.DEBUG, 'Schedule:add() - new event #' .. newIdx ..':', timeDelta, func, params, repeatTimeDelta)
 
         self.events[newIdx] = {
