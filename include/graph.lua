@@ -15,11 +15,18 @@ Graph = {
         rubber   = 'Rubber'
     },
 
-    data     = {},
-    lastData = {},
-
     new = function (self, o)
-        o = o or {}   -- create object if user does not provide one
+        o = o or {}                                         -- create object if user does not provide one
+
+        if type(o.data) ~= 'table' then
+            o.data = {}
+            o.lastData = {}
+        end
+
+        if type(o.info) ~= 'table' then
+            o.info = {}
+        end
+
         setmetatable(o, self)
         self.__index = self
         return o
@@ -61,20 +68,26 @@ Graph = {
         self.gpu:fill(self.offX, self.offY, w, self.height + 3, ' ') -- +3 for temp. extra text below
     end,
 
-    addData = function(self, group, name, type, cur, max)
+    addData = function(self, group, type, name, cur, max)
         -- type:1=prod, 2=buffer
-        if self.data[group] == nil then
-            self.data[group]     = {}
-            self.lastData[group] = {}
-        end
-
-        if self.data[group][name] == nil then
+        if not self.data[group] or not self.data[group][name] then
+            self.data[group] = self.data[group] or {}
             self.data[group][name]     = {{0, 0}, {0, 0}}
             self.lastData[group][name] = {{0, 0}, {0, 0}}
         end
 
         self.lastData[group][name][type] = self.data[group][name][type]
         self.data[group][name][type] = {cur, max}
+    end,
+
+    addInfo = function(self, group, type, name, title, color, order)
+        -- type:1=plant, 2=prodLine
+        if not self.info[group] or not self.info[group][name] then
+            self.info[group] = self.info[group] or {}
+            self.info[group][name] = {{}, {}}
+        end
+
+        self.info[group][name][type] = {title, color, order}
     end,
 
     drawSystem = function(self)
@@ -108,17 +121,14 @@ Graph = {
         self.gpu:fill(6 + self.offX, self.height - 2 + self.offY, totalWidth - 7, 1, '─')
     end,
 
-    drawBar = function(self, offX, title, prodBar, bufferBar)
+    drawBar = function(self, offX, title, material, prodBar, bufferBar)
         if prodBar[2] <= 0 then
             return 0
         end
-        title = title or 'white'
+        material = material or 'white'
 
-        self.gpu:setForeground(Color(title))
+        self.gpu:setForeground(Color(material, 0.5))
         self.gpu:setBackground(Color('black'))
-
-        -- descriptor
-        self.gpu:setText(1 + offX, self.height - 1 + self.offY, self.names[title] or title)
 
         -- base
         self.gpu:setText(offX + 1, self.height - 2 + self.offY, '▀▀▀▀▀▀▀')
@@ -129,10 +139,10 @@ Graph = {
         for i = 1, math.floor(barLen), 1 do
             if i == self.fullLen then
                 self.gpu:setForeground(Color('black'))
-                self.gpu:setBackground(Color(title))
+                self.gpu:setBackground(Color(title, 0.5))
                 self.gpu:setText(offX + 1, self.offY + self.height - (i + 2), '───────')
                 self.gpu:setBackground(Color('black'))
-                self.gpu:setForeground(Color(title))
+                self.gpu:setForeground(Color(title, 0.5))
             else
                 self.gpu:setText(offX, self.offY + self.height - (i + 2), ' ████    ')
             end
@@ -142,6 +152,9 @@ Graph = {
             self.gpu:setText(offX + 1, self.offY + self.height - math.floor(barLen + 3), '▄▄▄▄')
         end
 
+        self.gpu:setForeground(Color(material, 1))
+        self.gpu:setBackground(Color('black'))
+
         -- draw buffer bar over prod bar
         if bufferBar[2] > 0 then
             local barLen  = math.min(self.height - 2, (bufferBar[1] / bufferBar[2]) * self.fullLen - 1)
@@ -149,24 +162,26 @@ Graph = {
             for i = 1, math.floor(barLen), 1 do
                 if i == self.fullLen then
                     self.gpu:setForeground(Color('black'))
-                    self.gpu:setBackground(Color(title, 1))
+                    self.gpu:setBackground(Color(material, 1))
                     self.gpu:setText(offX + 5, self.offY + self.height - (i + 2), '───')
                     self.gpu:setBackground(Color('black'))
-                    self.gpu:setForeground(Color(title, 1))
+                    self.gpu:setForeground(Color(material, 1))
                 else
                     self.gpu:setText(offX + 5, self.offY + self.height - (i + 2), '▐██')
                 end
             end
         end
 
+        self.gpu:setForeground(Color('white'))
+
         -- text
+        self.gpu:setText(1 + offX, self.height - 1 + self.offY, self.names[title] or title)
+
         self.gpu:setText(1 + offX, self.height + 0 + self.offY, math.round(prodBar[1] / prodBar[2] * 100, 2) .. '%')
         self.gpu:setText(1 + offX, self.height + 1 + self.offY, prodBar[1] .. ' / ' .. prodBar[2])
         if bufferBar[2] > 0 then
-            self.gpu:setText(1 + offX, self.height + 2 + self.offY, math.round(bufferBar[1], 1))
+            self.gpu:setText(1 + offX, self.height + 2 + self.offY, math.ceil(bufferBar[1]))
         end
-
-        self.gpu:setForeground(Color('white'))
 
         return self.barWidth
     end,
@@ -176,7 +191,8 @@ Graph = {
 
         offX = offX + 1
         for name, bars in pairs(group) do
-            offX = offX + self:drawBar(offX, name, bars[1], bars[2])
+            local material = nil                            -- todo: get for real
+            offX = offX + self:drawBar(offX, name, material, bars[1], bars[2])
             barIdx = barIdx + 1
         end
 

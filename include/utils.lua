@@ -1,3 +1,16 @@
+function math.round(num, numDecimalPlaces)
+    local mult = 10^(numDecimalPlaces or 0)
+    return math.floor(num * mult + 0.5) / mult
+end
+
+function math.hexfloat(hex)
+    if #hex == 1 then
+        hex = hex .. hex
+    end
+    return tonumber(hex, 16) / 255
+end
+
+
 -- ----------
 -- ENUMS (mostly)
 -- ----------
@@ -8,40 +21,41 @@ PORT = {                                                    -- Splitter + Merger
     RIGHT  = 2
 }
 
-PLANT_STATE = {
-    STARTUP         = 0,
-    CONNECT_WAIT    = 1,
-    WORKING         = 2,
-    DISCONNECT_WAIT = 3,
-    SHUTDOWN        = 4
+PLANT_STATE = {                                             -- 0 => 1 <=> 2 <=> 3 => 4 => 5
+    STARTUP         = 0,                                    -- self startup
+    CONNECT_WAIT    = 1,                                    -- self ready, waiting for connection
+    PAUSED          = 2,                                    -- self ready, connected, waiting for go from extern
+    WORKING         = 3,                                    -- working
+    DISCONNECT_WAIT = 4,                                    -- self ready, managing disconnect
+    SHUTDOWN        = 5                                     -- write temp vars to disk and restart
 }
+--[[
+    Color(<mixed>) : r, g, b, e
+    usage:
+    ..by predefined name
+    Color($name [, emitStrength])
+    e.g.: Color('fuel', 2) => 0.7, 0.4, 0.2, 2.0
 
-Log = {
-    NONE  = 0,
-    ERROR = 1,
-    WARN  = 2,
-    INFO  = 3,
-    DEBUG = 4,
+    ..by Hex value
+    Color($hexString [, emitStrength])
+    e.g: Color('#F80') => 1.0, 0.5, 0.0, 1.0
 
-    levels = {'ERROR', 'WARN', 'INFO', 'DEBUG'},
+    Color($hexwithEmitString)
+    e.g: Color('#FFFFFF80') => 1.0, 1.0, 1.0, 0.5
 
-
-    write = function(self, level, ...)
-        if (level <= LOGLEVEL) then
-            print('['.. DEVICE .. '] [' .. Time(computer.time()) .. '] ' .. string.pad('[' .. self.levels[level] .. ']', 7, ' ') .. ' -', table.unpack({...}))
-        end
-
-        -- todo: create log file handler
-    end
-}
-
+    ..by rgb value
+    Color($r, $g, $b [, $e])
+    e.g: Color(255, 0, 255, 128) => 1.0, 0.0, 1.0, 0.5
+  ]]
 Color = setmetatable(
     {
         -- basic
         white    = {1.0, 1.0, 1.0},
         black    = {0.0, 0.0, 0.0},
         red      = {1.0, 0.0, 0.0},
+        darkred  = {0.3, 0.0, 0.0},
         blue     = {0.0, 0.0, 1.0},
+        darkblue = {0.0, 0.0, 0.5},
         green    = {0.0, 1.0, 0.0},
         yellow   = {1.0, 1.0, 0.0},
         purple   = {1.0, 0.0, 1.0},
@@ -54,35 +68,35 @@ Color = setmetatable(
         fuel     = {0.7, 0.4, 0.2, 0.5},
         plastic  = {0.3, 0.6, 0.9, 0.5},
         rubber   = {0.3, 0.3, 0.3, 0.5},
-        hexfloat = function(hex)
-            if #hex == 1 then
-                hex = hex .. hex
-            end
-            return tonumber(hex, 16) / 255
-        end
+        water    = {0.1, 0.3, 0.5, 0.5}
     },
     {
         __call = function(this, ...)
             local args = {...}
             local col  = this[args[1]]
-            local hex, len, r, g, b, e = tostring(args[1]):find('^#(%x%x)(%x%x)(%x%x)(%x?%x?)$')
+            local _, __, str = tostring(args[1]):find('^(%a+)%d$')
+            if not col and str then
+                col = this[str]
+            end
+
+            local hex, __, r, g, b, e = tostring(args[1]):find('^#(%x%x)(%x%x)(%x%x)(%x?%x?)$')
             if not hex then
-                hex, len, r, g, b, e = tostring(args[1]):find('^#(%x)(%x)(%x)(%x?)$')
+                hex, __, r, g, b, e = tostring(args[1]):find('^#(%x)(%x)(%x)(%x?)$')
             end
 
             -- named
             if col then
-                col[4] = args[4] or col[4] or 1
+                local emit = args[2] or col[4] or 1
 
-                if col[4] < 0 then
-                    col[4] = 0
+                if emit < 0 then
+                    emit = 0
                 end
 
-                if col[4] > 10 then
-                    col[4] = 10
+                if emit > 10 then
+                    emit = 10
                 end
 
-                return table.unpack(col)
+                return col[1], col[2], col[3], emit
 
             -- hex
             elseif hex then
@@ -93,46 +107,44 @@ Color = setmetatable(
                     emit = 1
                 end
 
-                return this.hexfloat(r), this.hexfloat(g), this.hexfloat(b), emit or this.hexfloat(e)
+                return math.hexfloat(r), math.hexfloat(g), math.hexfloat(b), emit or math.hexfloat(e)
 
             -- rgb
             elseif #args == 3 or #args == 4 then
                 args[4] = args[4] or 255
                 return args[1] / 255, args[2] / 255, args[3] / 255, args[4] / 255
             else
-                print('Color() - invalid params:', table.unpack(args))
+                Log:write(Log.WARN, 'Color() - invalid params:', table.unpack(args))
                 return 0, 0, 0, 1
             end
         end
     }
 )
 
-print(Color('red', 0))
-print(Color('green', 1))
-print(Color(255, 128, 64))
-print(Color(255, 0, 0, 128))
-print(Color('#F0A'))
-print(Color('#F0A3'))
-print(Color('#FF00AA33'))
-print(Color('#FF0088'))
--- assert(false)
-
 -- ----------
 -- Funcs
 -- ----------
 
-function math.round(num, numDecimalPlaces)
-    local mult = 10^(numDecimalPlaces or 0)
-    return math.floor(num * mult + 0.5) / mult
-end
-
 function GetLevel(ref, stackSize, material)
+
+    if type(ref) == 'table' then
+        local pct, cur, max = 0, 0, 0
+        for _, r in pairs(ref) do
+            local p, c, m = GetLevel(r, stackSize, material)
+            pct = pct + p
+            cur = cur + c
+            max = max + m
+        end
+
+        return pct, cur, max
+    end
+
     if not ref or not ref.getInventories then
-        return 0, 0
+        return 0, 0, 0
     end
 
     local inv = ref:getInventories()[1]
-    if inv ~= nil then                   -- solid
+    if inv ~= nil then                                      -- solid
         if material then
             local qty = 0
             for i = 0, inv.size - 1, 1 do
@@ -142,18 +154,32 @@ function GetLevel(ref, stackSize, material)
                     qty = qty + stack.count
                 end
             end
-            return qty / (inv.size * (stackSize or 0)), qty
+            return qty / (inv.size * (stackSize or 0)), qty, inv.size * (stackSize or 0)
         else
-            return inv.ItemCount / (inv.size * stackSize), inv.ItemCount
+            return inv.ItemCount / (inv.size * stackSize), inv.ItemCount, inv.size * stackSize
         end
-    elseif ref.fluidContent ~= nil then  -- fluid
-        return ref.fluidContent / ref.maxFluidContent, ref.fluidContent
-    else
-        Log.write(Log.ERROR, 'getLevel() passed ref is no container!')
-        computer.beep(1)
+    elseif ref.fluidContent ~= nil then                     -- fluid
+        return ref.fluidContent / ref.maxFluidContent, ref.fluidContent, ref.maxFluidContent
     end
 
-    return 0, 0
+    Log.write(Log.ERROR, 'getLevel() passed ref is no container!')
+    return 0, 0, 0
+end
+
+function ScaleProdGroup(ref, on, off, state)
+    local enabled = 0
+    if off and ref.standby ~= state then
+        ref.standby = state
+    elseif on then
+        if (ref.productivity > 0.2) then
+            enabled = enabled + 1
+        end
+        if ref.standby == state then
+            ref.standby = not state
+        end
+    end
+
+    return enabled
 end
 
 function ScaleProduction(machines, curBuffer, maxBuffer, inverse)
@@ -164,20 +190,24 @@ function ScaleProduction(machines, curBuffer, maxBuffer, inverse)
         state = false
     end
 
+    -- todo: check for already paused machines and subtract from req. standby state
+
     for i, ref in pairs(machines) do
-        if curBuffer > (i + 1) * step and ref.standby ~= state then
-            ref.standby = state
-        elseif curBuffer <= i * step then
-            if (ref.productivity > 0.2) then
-                enabled = enabled + 1
+        local on  = curBuffer > (i + 1) * step
+        local off = curBuffer <= i * step
+
+        if type(ref) == 'table' then
+            local en, max = {}, {}
+            for j, r in pairs(ref) do
+                en[j]  = ScaleProdGroup(r, on, off, state)
+                max[j] = #ref
             end
-            if ref.standby == state then
-                ref.standby = not state
-            end
+            return en, max
+        else
+            enabled = ScaleProdGroup(ref, on, off, state)
+            return enabled, #machines
         end
     end
-
-    return enabled, #machines
 end
 
 

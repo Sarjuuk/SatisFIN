@@ -4,7 +4,7 @@ Schedule = {
 
     update = function(self, microTime)
 
-        -- Log:write(Log.DEBUG, 'Schedule::update()', Time(microTime / 1000))
+        Log:write(Log.DEBUG, 'Schedule::update()', Time(microTime / 1000))
 
         for i, event in pairs(self.events) do
             if event[1] <= microTime then

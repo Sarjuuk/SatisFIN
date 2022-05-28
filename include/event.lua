@@ -1,9 +1,24 @@
-event.delay = 0.10
+--[[
+    usage:
+    Merger  = component.proxy(<mergerUUID>)
+    event:register(Merger , 'ItemOutputted', print) -- just dump info to console
+    event:register(Merger , 'ItemRequest', function (port, item)
+        Merger:transferItem(port)
+    end)
+
+    -- in the main program loop
+    repeat
+        -- add this
+        event:update()
+    until false
+  ]]
+
+event.delay = EVENT_DELAY or 0.05
 event.components = {}
 
 function event:register(component, forType, handler)
 
-    Log:write(Log.DEBUG, 'event:register() - ' .. tostring(component), handler, forType)
+    Log:write(Log.DEBUG, 'event:register() -', tostring(component), handler, forType)
 
     event.listen(component)
     table.insert(self.components, {component, handler, forType or nil})
@@ -11,14 +26,17 @@ end
 
 function event:detach(component, forType)
 
-    Log:write(Log.DEBUG, 'event:detach() - ' .. tostring(component), forType)
+    Log:write(Log.DEBUG, 'event:detach() -', tostring(component), forType)
 
     local canIgnore = true
     for i, tbl in ipairs(self.components) do
         if tbl[1].hash == component.hash then
-            if forType and tbl[3] == forType then
+            if not forType then
                 self.components[i] = nil
-            elseif forType then
+                break
+            elseif tbl[3] == forType then
+                self.components[i] = nil
+            else
                 canIgnore = false
             end
         end
@@ -30,24 +48,30 @@ function event:detach(component, forType)
 end
 
 function event:update()
-    local type, comp, data1, data2, data3, data4, data5, data6, data7 = event.pull(self.delay)
+    local data = {event.pull(self.delay)}
 
-    if (type == nil) then
+    if #data == 0 then
         return
     end
 
-    Log:write(Log.DEBUG, 'event:update() - ' .. type, comp, data1, data2, data3, data4, data5, data6, data7)
+    Log:write(Log.DEBUG, 'event:update() -', table.unpack(data))
 
-    for i, entry in pairs(self.components) do
+    local type = table.remove(data, 1)
+    local comp = table.remove(data, 1)
+
+    local handled = false
+    for i, entry in ipairs(self.components) do
         if comp == entry[1] then
             if not entry[3] or entry[3] == type then
-                entry[2](data1, data2, data3, data4, data5, data6, data7)
-                return
+                entry[2](table.unpack(data))
+                handled = true
             end
         end
     end
 
-    Log:write(Log.WARN, 'event:update() - unhandled event ' .. type, comp, data1, data2, data3, data4, data5, data6, data7)
+    if not handled then
+        Log:write(Log.WARN, 'event:update() - unhandled event', type, comp, table.unpack(data))
+    end
 end
 
 -- startup

@@ -11,7 +11,7 @@ Log = {
 
     start = function (self)
         if not self.file then
-            self.file = fs.open('/logs/' .. DEVICE .. '.log', 'a+')
+            self.file = FS.open('/logs/' .. DEVICE .. '.log', 'a+')
             if not self.file then
                 print('['.. DEVICE .. '] [' .. Time(computer.time()) .. '] ' .. string.pad('[' .. self.levels.ERROR .. ']', 7, ' ') .. ' - Could not open log file for device!')
                 return
@@ -29,7 +29,7 @@ Log = {
     end,
 
     write = function(self, level, ...)
-        if (level > LOGLEVEL) then
+        if (level > (LOG_LEVEL or 0)) then
             return
         end
 
@@ -38,7 +38,10 @@ Log = {
         print(str)
 
         if self.file then
-            self.file:write(tostring(str) .. "\n")
+            local status, err = pcall(function(out) Log.file:write(out) end, tostring(str) .. "\n")
+            if err then
+                print('Log:write(): ERROR -', err, str, "\n")
+            end
         end
     end,
 
