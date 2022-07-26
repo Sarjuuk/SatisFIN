@@ -1,0 +1,45 @@
+hdd-uuid                            file
+21A053484A21A2E4D1FD188650F05F75    gold-coast/master.lua
+BCF522D74E5581F121C5C9A6D78E838A    gold-coast/refinery.lua
+5D7FB6194715D1AAA700E89B6109374F    gold-coast/fuel-plant-lua
+B2C1FFA1439F59207B8253BD6F644259    gold-coast/preprocessing.lua
+8E8E15F94B59212F616E1D849E8A6425    gold-coast/rubber-plant.lua
+8978981B402C4D16C17FBDBCD1ACC29D    gold-coast/plastic-plant.lua
+
+399B47DD4E026C74DF4289B9F5176AB2    spire-coast/powerplant.lua
+
+AC6D58C54355A9F984369F80DAA43AF6    swamp/plastic-plant.lua
+
+-- ---------
+-- loader
+-- ----------
+
+DEVICE      = 'Dummy'
+HDDUUID     = 'AC6D58C54355A9F984369F80DAA43AF6'
+FS          = filesystem
+LOG_LEVEL   = 4                                             -- [NONE, ERROR, WARN, INFO, DEBUG]
+EVENT_DELAY = 0.05
+EXT_LIB     = {
+    '/include/utils.lua',
+    '/include/network.lua',
+    '/include/event.lua',
+    '/include/scheduler.lua',
+    '/include/logger.lua',
+    '/include/graph.lua'
+}
+
+
+if not FS.initFileSystem('/dev') then
+    computer.panic('Cannot initialize /dev')
+end
+FS.mount('/dev/' .. HDDUUID, '/')
+
+if FS.isFile('/' .. string.lower(DEVICE) .. '.lua') then
+    for _, file in ipairs(EXT_LIB) do
+        FS.doFile(string.lower(file))
+    end
+    FS.doFile('/' .. string.lower(DEVICE) .. '.lua')
+else
+    computer.panic('program code for ' .. string.lower(DEVICE) .. ' not found!')
+end
+
