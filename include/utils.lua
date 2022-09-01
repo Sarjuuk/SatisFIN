@@ -1,3 +1,5 @@
+assert(type(Log) == 'table',               'Required Include "Log" not found')
+
 function math.round(num, numDecimalPlaces)
     local mult = 10^(numDecimalPlaces or 0)
     return math.floor(num * mult + 0.5) / mult
@@ -22,13 +24,19 @@ PORT = {                                                    -- Splitter + Merger
 }
 
 PLANT_STATE = {                                             -- 0 => 1 <=> 2 <=> 3 => 4 => 5
-    STARTUP         = 0,                                    -- self startup
-    CONNECT_WAIT    = 1,                                    -- self ready, waiting for connection
-    PAUSED          = 2,                                    -- self ready, connected, waiting for go from extern
-    WORKING         = 3,                                    -- working
-    DISCONNECT_WAIT = 4,                                    -- self ready, managing disconnect
-    SHUTDOWN        = 5                                     -- write temp vars to disk and restart
+    STARTUP         = 1,                                    -- self startup
+    CONNECT_WAIT    = 2,                                    -- self ready, waiting for connection
+    PAUSED          = 3,                                    -- self ready, connected, waiting for go from extern
+    WORKING         = 4,                                    -- working
+    DISCONNECT_WAIT = 5,                                    -- self ready, managing disconnect
+    SHUTDOWN        = 6                                     -- write temp vars to disk and restart
 }
+
+QTY = {
+    FLUID_BUFFER_SMALL = 400,
+    ITEM_STACK         = 200
+}
+
 --[[
     Color(<mixed>) : r, g, b, e
     usage:
@@ -264,7 +272,6 @@ function Time(time)
 end
 
 function string.pad(str, len, sub, front)
-
     sub   = sub or ' '
     front = front or false
 
@@ -278,25 +285,16 @@ function string.pad(str, len, sub, front)
     return str
 end
 
+function string.ucFirst(str)
+    return str:gsub("^%l", string.upper)
+end
+
 function Keys(tbl)
     local set = {}
     for i, _ in pairs(tbl) do
         table.insert(set, i)
     end
     return table.unpack(set)
-end
-
-function table:keys(asTable)
-    local set = {}
-    for i, _ in pairs(tbl) do
-        table.insert(set, i)
-    end
-
-    if asTable then
-        return set
-    else
-        return table.unpack(set)
-    end
 end
 
 function BoolColor(cond)

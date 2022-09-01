@@ -13,6 +13,8 @@
     until false
   ]]
 
+assert(type(Log) == 'table', 'Required Include "Log" not found')
+
 event.components = {}
 
 function event:register(component, forType, handler)

@@ -25,7 +25,7 @@ EXT_LIB     = {
     '/include/event.lua',
     '/include/scheduler.lua',
     '/include/logger.lua',
-    '/include/graph.lua'
+--  '/include/graph.lua'
 }
 
 
@@ -42,4 +42,3 @@ if FS.isFile('/' .. string.lower(DEVICE) .. '.lua') then
 else
     computer.panic('program code for ' .. string.lower(DEVICE) .. ' not found!')
 end
-

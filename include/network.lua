@@ -1,3 +1,7 @@
+assert(type(Log) == 'table',               'Required Include "Log" not found')
+assert(type(Schedule) == 'table',          'Required Include "Schedule" not found')
+assert(type(event.register) == 'function', 'Required Include "Event" not found')
+
 Net = {
     msg = {            -- handler, {expected data}
         -- Net
@@ -127,6 +131,25 @@ Net = {
         else
             self.nic:broadcast(targetPort, msg, table.unpack(args))
         end
+    end,
+
+    addHandler = function(self, msg, n, fn)
+        if type(msg) ~= 'string' or type(n) ~= 'string' or type(fn) ~= 'function' then
+           Log:write(Log.ERROR, 'Net:addHandler() - type error')
+           return
+        end
+
+        if type(self.msg[msg]) ~= 'table' then
+            Log:write(Log.ERROR, 'Net:addHandler() - tried to handle unused msg:', msg)
+            return
+        end
+
+        if type(self[n]) == 'function' then
+            Log:write(Log.WARN, 'Net:addHandler() - overwriting already defined handler:', n)
+        end
+
+        Net.msg[msg][1] = n
+        Net[n] = fn
     end,
 
     handleResetRcv = function(self, srcUUID)

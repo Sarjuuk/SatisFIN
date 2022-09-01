@@ -1,3 +1,5 @@
+assert(type(Log) == 'table', 'Required Include "Log" not found')
+
 Graph = {
     gpu    = nil,
 

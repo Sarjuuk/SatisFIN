@@ -1,3 +1,5 @@
+assert(type(Log) == 'table', 'Required Include "Log" not found')
+
 Schedule = {
     events     = {},            -- [time, func, params, reschedule]
     lastUpdate = 0,

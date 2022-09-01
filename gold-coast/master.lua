@@ -2,12 +2,10 @@
 -- vars
 -- -----------
 
-Plant = {
-    name    = 'master',
-    tmpFile = '/tmp/' .. string.lower(DEVICE) .. '.var',
-    state   = PLANT_STATE.STARTUP,
-    graphs  = {},
-    request = {
+Master = Plant:init({
+    name     = 'master',
+    graphs   = {},
+    request  = {
         rubber  = 0,
         plastic = 0
     },
@@ -21,30 +19,7 @@ Plant = {
         end
     end,
 
-    -- ---------
-    -- state updates
-    -- ---------
-
-    update = function(self)
-        if self.state == PLANT_STATE.STARTUP then
-            self:startup()
-        elseif self.state == PLANT_STATE.CONNECT_WAIT then
-            self:connect()
-        elseif self.state == PLANT_STATE.PAUSED then
-            self:paused()
-        elseif self.state == PLANT_STATE.WORKING then
-            self:working()
-        elseif self.state == PLANT_STATE.DISCONNECT_WAIT then
-            self:disconnect()
-        elseif self.state == PLANT_STATE.SHUTDOWN then
-            self:shutdown()
-        else
-            Log:write(Log.ERROR, 'Plant', self.name, ' in unknown state:', self.state, ' Hard reset!')
-            computer.reset()
-        end
-    end,
-
-    startup = function(self)
+    onStartup = function(self)
         CLS(GPU)
         GPU:setText(0, 0, 'Booting...')
         GPU:flush()
@@ -60,15 +35,15 @@ Plant = {
         self.state = PLANT_STATE.CONNECT_WAIT
     end,
 
-    connect = function(self)
+    onConnect = function(self)
 
     end,
 
-    paused = function(self)
+    onPause = function(self)
 
     end,
 
-    working = function(self)
+    onWorking = function(self)
 
         if self.request.rubber > 0 then
             Net:send(Factories.preprocessing[1], Factories.preprocessing[2], 'REQ_ITEM', 'Rubber', self.request.rubber)
@@ -83,7 +58,7 @@ Plant = {
         self.graphs[2]:draw()
     end,
 
-    disconnect = function(self)
+    onDisconnect = function(self)
         CLS(GPU)
         GPU:setText(0, 0, 'Shutdown: Waiting for clients..')
         local i = 0
@@ -114,7 +89,7 @@ Plant = {
         end
     end,
 
-    shutdown = function(self)
+    onShutdown = function(self)
         CLS(GPU)
         GPU:setText(0, 0, 'Shutting down...')
         GPU:flush()
@@ -125,98 +100,8 @@ Plant = {
 
         self.hold = true
         -- self:saveVars('request') -- fix table delimiter issue
-    end,
-
-    loadVars = function(self, ...)
-        if not FS or not FS.open then
-            Log:write(Log.ERROR, 'Plant:loadVars() - Filesystem global [FS] not set')
-            return
-        end
-
-        if not self.tmpFile or not FS.isFile(self.tmpFile) then
-            Log:write(Log.ERROR, 'Plant:loadVars() - Filename invalid or not pointing at file')
-            return
-        end
-
-        local expectedVars = {...}
-
-        local tmpFile = FS.open(self.tmpFile, 'r')
-
-        local line, chr = '', ''
-        repeat
-            line = line .. chr
-            chr = tmpFile:read(1)
-
-            if chr == "\n" then
-                local pos, len, name, val = line:find('(%w+) (.*)')
-                if pos == 1 and name and val then
-                    for i, ev in ipairs(expectedVars) do
-                        if ev == name then
-                            if val:sub(1, 1) == '[' and val:sub(#val) == ']' then -- table
-                                self[name] = {}
-
-                                if #val >= 5 then -- "[x y]" 5 chars minimum size for tbl with value
-                                    val = val:sub(2, #val - 1) -- remove brackets
-                                    repeat
-                                        local _, n = val:find("\t")
-                                        if n then
-                                            local _, __, k, v = val:sub(1, n):find('(%w+) (.*)')
-                                            val = val:sub(n + 1)
-                                            self[name][k] = v
-                                            print('x', k, v)
-                                        end
-                                    until not n
-
-                                    local _, ___, k, v = val:find('(%w+) (.*)')
-                                    print('y', k, v)
-                                    self[name][k] = v
-                                end
-                            else -- non-table
-                                self[name] = val
-                            end
-                            break
-                        end
-                    end
-                else
-                    Log:write(Log.ERROR, "Plant:loadVars() - malformated variable in tmp file: " .. line)
-                end
-
-                line = ''
-                chr  = ''
-            end
-        until not chr
-
-        tmpFile:close()
-    end,
-
-    saveVars = function (self, ...)
-        if not FS or not FS.open then
-            Log:write(Log.ERROR, 'Plant:loadVars() - Filesystem global [FS] not set')
-        end
-
-        if not self.tmpFile then
-            return
-        end
-
-        local tmpFile = FS.open(self.tmpFile, 'w+')
-
-        for _, var in ipairs({...}) do
-            if type(self[var]) == 'table' then
-                local tmp = ''
-                for k, v in pairs(self[var]) do
-                    if k and v then
-                        tmp = tmp .. k .. ' ' .. tostring(v) .. "\t"
-                    end
-                end
-                tmpFile:write(var .. ' [' .. tmp:sub(1, #tmp - 1) .. "]\n")
-            else
-                tmpFile:write(var .. ' ' .. tostring(self[var]) .. "\n")
-            end
-        end
-
-        tmpFile:close()
     end
-}
+})
 
 Factories = {       -- {NetUUID, Port, Schedule, graphIdx}
     refinery      = {nil, nil, nil, 1},

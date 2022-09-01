@@ -1,59 +1,69 @@
 -- send 20 cells / min in batches of 200 (one every 10 min) to avoid radiation outside of the nuclear plant (max. 200 at once or the drone completes the pickup while the port is still being loaded)
 
 Port       = component.proxy('7A715EE34AE5A7134F4C1C93AC71EB0D')
-Gate       = component.proxy('55ECCB4844111AD9D81E098D10026A57')
-Panel      = component.proxy('EBC315A542D9F418CD86A6894F7EED2F')
-Stacklight = component.proxy('CE65322A4D8DC29B7F631B9A10323476')
-Buffer     = component.proxy('2EB1C4C6453C5D13AC00A4BF8E30AC65')
+Gate       = component.proxy('2B239B0E4F868D494877B79EA969FEB7')
+Panel      = component.proxy('F0D0EE0E4FF77A350A7A45B4DC4C05D4')
+Stacklight = component.proxy('15B7F7E346F8D4F9954C258A33290617')    -- old Indicator
+Buffer     = component.proxy('8E9881344C320D8E15EEAE8B0E730B59')
 Display    = {
-    ['batch']    = Panel:getModule(0, 7),
-    ['buffer']   = Panel:getModule(3, 7),
-    ['transfer'] = Panel:getModule(6, 7),
-    ['port']     = Panel:getModule(9, 7),
-    ['time']     = Panel:getModule(0, 4),
-    ['status']   = Panel:getModule(3, 4),
-    ['standby']  = Panel:getModule(5, 4)
+    batch    = Panel:getModule(0, 7),
+    buffer   = Panel:getModule(3, 7),
+    transfer = Panel:getModule(6, 7),
+    port     = Panel:getModule(9, 7),
+    time     = Panel:getModule(0, 4),
+    status   = Panel:getModule(3, 4),
+    standby  = Panel:getModule(5, 4),
+    reset    = Panel:getModule(9, 1),
+    waste    = Panel:getModule(0, 0),
 }
 
-Millis       = 0
 BatchSize    = 200
 BatchTime    = 10 * 60 * 1000                               -- in ms
+InitTime     = 10 * 1000                                    -- check if we start game with cells already in port or en route
+CurTime      = BatchTime * (1 - math.min(1, (Buffer:getInventories()[1].itemCount / BatchSize)))
+Millis       = 0
 Loading      = false
 CanSend      = false
-CurTime      = 10 * 1000                                    -- init delay
 LoadItems    = 0
-Port.standby = true                                         -- init port as paused
+Port.standby = false                                        -- init port as working
+-- approximate time to next pickup from initial inventory (min: 10s)
+Display.reset:setColor(1, 0, 0, 0)
+Display.waste.monospace = true
+Display.waste.size = 46 -- 16 chars wide
 
 event.listen(Gate)
+event.listen(Display.reset)
 
 repeat
 
-    local tDiff = computer.millis() - Millis
+    local tDiff   = computer.millis() - Millis
+    local initOld = InitTime
 
     Schedule:update(computer.millis())
 
     Millis = computer.millis()
 
-    CurTime = CurTime - tDiff
+    CurTime  = CurTime - tDiff
+    InitTime = math.max(0, InitTime - tDiff)
 
-    -- cap load delay to 5min max.
-    if CurTime < -(BatchTime / 2) then
-        CurTime = -BatchTime / 2
-    end
-
-    local signal, comp, port, item = event.pull(EVENT_DELAY)
+    local signal, comp = event.pull(EVENT_DELAY)
 
     local portItems   = Port:getInventories()[1].itemCount
     local bufferItems = Buffer:getInventories()[1].itemCount
 
+    -- after init time no items in port? -> disable port so regular routine can work
+    if initOld > 0 and InitTime == 0 and portItems == 0 then
+        Port.standby = true
+    end
+
     if Loading then
 
-        if Gate:canOutput(1) and Gate:getInput() and CanSend then
-            Gate:transferItem(1)
+        if Gate:canOutput(PORT.CENTER) and Gate:getInput() and CanSend then
+            Gate:transferItem(PORT.CENTER)
             CanSend = false
         end
 
-        if signal == 'ItemOutputted' then -- and (LoadItems + portItems) < BatchSize then
+        if signal == 'ItemOutputted' and comp == Gate then -- and (LoadItems + portItems) < BatchSize then
             LoadItems = LoadItems + 1
             CanSend   = true
         end
@@ -63,10 +73,10 @@ repeat
             CurTime = CurTime + BatchTime
         end
 
-    elseif Gate:canOutput(1) and portItems == 0 and bufferItems >= BatchSize and CurTime <= 0 then
+    elseif Gate:canOutput(PORT.CENTER) and portItems == 0 and bufferItems >= BatchSize and CurTime <= 0 then
         Loading = true
         CanSend = true
-        Schedule:add(5, function() Port.standby = false end)-- open port 5 sec after opening storage
+        Schedule:add(3, function() Port.standby = false end)-- open port 3 sec after opening storage
     end
 
     -- enable Port when loading items, so the drone can come and pick them up
@@ -76,9 +86,45 @@ repeat
     end
 
 
-    -- ----------
+    -- --------------------
+    -- handle reset request
+    -- --------------------
+
+    if signal == 'Trigger' and comp == Display.reset then
+        Display.reset:setColor(1, 0, 0, 2)
+        Schedule:add(0.2, Display.reset.setColor, {Display.reset, 1, 0, 0, 0})
+        Schedule:add(0.4, Display.reset.setColor, {Display.reset, 1, 0, 0, 1})
+        Schedule:add(0.6, Display.reset.setColor, {Display.reset, 1, 0, 0, 0})
+        Schedule:add(0.8, Display.reset.setColor, {Display.reset, 1, 0, 0, 1})
+        Schedule:add(1.0, Display.reset.setColor, {Display.reset, 1, 0, 0, 0})
+        Schedule:add(1.2, computer.reset)
+    end
+
+
+    -- --------------------
+    -- calc waste space
+    -- --------------------
+
+    local endStorage = component.proxy(component.findComponent('Container'))
+    local pct, cur, max = GetLevel(endStorage, 500)
+    local wasteDsp = string.pad(cur, 6, ' ', true) .. ' / ' .. max .. "\n".. string.pad(math.round(pct, 2) .. '%', 15, ' ', true) .. "\n"
+    wasteDsp = wasteDsp .. '▌'
+    for i=1, 14, 1 do
+        if (i / 14) < (pct / 100) then
+            wasteDsp = wasteDsp .. '█'
+        else
+            wasteDsp = wasteDsp .. ' '
+        end
+    end
+    wasteDsp = wasteDsp .. '▐'
+
+
+    Display.waste.text = wasteDsp
+
+
+    -- --------------------
     -- display stuff below
-    -- ----------
+    -- --------------------
 
     local dspLoad = math.max(0, LoadItems - portItems)
     local dspTime = math.floor(CurTime / (60 * 1000)) .. ':' .. string.format('%02d', math.floor(math.fmod(CurTime, 60 * 1000) / 1000))
@@ -106,23 +152,17 @@ repeat
 
     if Loading then
         Display['status']:setColor(0, 1, 0, 0.5)
-        Stacklight:getModule(0):setColor(0, 1, 0, 2)
-        Stacklight:getModule(1):setColor(0.3, 0.3, 0, 0)
-        Stacklight:getModule(2):setColor(0.3, 0, 0, 0)
+        Stacklight:setColor(0, 1, 0, 2)
     elseif CurTime > 0 then
         Display['status']:setColor(1, 0, 0, 0.5)
-        Stacklight:getModule(0):setColor(0, 0.3, 0, 0)
-        Stacklight:getModule(1):setColor(0.3, 0.3, 0, 0)
-        Stacklight:getModule(2):setColor(1, 0, 0, 2)
+        Stacklight:setColor(1, 0, 0, 2)
     else
         if dspLoad > 0 then
             Display['status']:setColor(1, 0.8, 0, 1)
         else
             Display['status']:setColor(0, 0.1, 0, 0)
         end
-        Stacklight:getModule(0):setColor(0, 0.3, 0, 0)
-        Stacklight:getModule(1):setColor(1, 1, 0, 2)
-        Stacklight:getModule(2):setColor(0.3, 0, 0, 0)
+        Stacklight:setColor(1, 1, 0, 2)
     end
 
 until false
